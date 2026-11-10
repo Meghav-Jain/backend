@@ -28,6 +28,10 @@ A robust REST API backend for the Task Master todo application built with FastAP
 ``` sh
 backend/
 ├── main.py              # Main application file
+├── worker.py            # Cloudflare Workers entrypoint
+├── wrangler.jsonc       # Workers and D1 configuration
+├── pyproject.toml       # Python Workers dependencies
+├── migrations/          # D1 schema migrations
 ├── requirements.txt     # Python dependencies
 ├── render.yaml         # Render.com deployment configuration
 └── test/
@@ -255,13 +259,7 @@ class Task(BaseModel):
 
 ### Storage Layer
 
-The `TaskStorage` class manages in-memory task storage with methods:
-
-- `get_all()`: Retrieve all tasks
-- `get_by_id(task_id)`: Get task by ID
-- `create(task_data)`: Create new task
-- `update(task_id, task_data)`: Update existing task
-- `delete(task_id)`: Delete task
+Cloudflare Workers requests use the bound D1 database for persistent task storage. Running the FastAPI app directly with Uvicorn (without a Workers environment) uses in-memory storage for local development; that data is not persistent.
 
 ### Business Logic
 
@@ -302,6 +300,34 @@ services:
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn main:app --host 0.0.0.0 --port 8000"
 ```
+
+### Cloudflare Workers and D1
+
+The Worker uses the existing FastAPI application and the D1 binding configured in `wrangler.jsonc`. The Python Workers runtime requires Python 3.13+, Node.js, and `uv`.
+
+1. From `backend/`, create a D1 database and copy its ID into `wrangler.jsonc` in place of `REPLACE_WITH_D1_DATABASE_ID`:
+
+  ```bash
+  uv run pywrangler d1 create todo-db
+  ```
+
+2. Apply the schema locally, then start the Worker:
+
+  ```bash
+  uv run pywrangler d1 migrations apply todo-db --local
+  uv run pywrangler dev
+  ```
+
+3. Apply the schema to the remote database and deploy:
+
+  ```bash
+  uv run pywrangler d1 migrations apply todo-db --remote
+  uv run pywrangler deploy
+  ```
+
+The Worker exposes the API and FastAPI docs at its assigned `workers.dev` URL. For Cloudflare Pages, set the frontend project root to `frontend`, build with `npm run build`, and use `dist` as the output directory. Set the Pages environment variable `VITE_API_URL` to the deployed Worker URL (without a trailing slash), then redeploy the frontend.
+
+The production CORS allowlist includes `https://todo-app.pages.dev`; update it in `main.py` if the Pages project uses another hostname. Keep `frontend/.env` local and use `.env.example` as the non-secret template.
 
 ### Manual Deployment
 
@@ -353,7 +379,7 @@ The API is configured to accept requests from:
 
 - `http://localhost:5173` (Vite dev server)
 - `http://127.0.0.1:5173`
-- All origins (`*`) for development
+- `https://todo-app.pages.dev` (Cloudflare Pages)
 
 ### Logging
 
@@ -366,7 +392,7 @@ Configured at INFO level. Logs include:
 
 ## 📈 Performance
 
-- **In-Memory Storage**: Fast read/write operations
+- **D1 Storage on Workers**: Persistent SQLite-compatible storage
 - **Async Framework**: FastAPI's async capabilities
 - **Auto-generated Docs**: Swagger UI for easy API exploration
 - **Input Validation**: Automatic request/response validation
