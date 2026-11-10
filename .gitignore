@@ -1,0 +1,11 @@
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+
+# Pywrangler-generated packages
+python_modules/
+
+# Wrangler local state
+.wrangler/
