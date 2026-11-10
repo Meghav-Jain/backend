@@ -1,0 +1,75 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+# Never run two deploys at once; a newer push cancels an older queued run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (from uv.lock)
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run --with pytest --with httpx python -m pytest -v
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: test
+    # Only deploy from master (pushes or manual runs), never from PRs.
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://todo-api.blackjackwarriors.workers.dev
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (from uv.lock)
+        run: uv sync --locked
+
+      - name: Apply D1 migrations
+        run: npx --yes wrangler@4 d1 migrations apply todo-db --remote
+
+      - name: Deploy Worker
+        run: uv run pywrangler deploy
+
+      - name: Smoke test
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://todo-api.blackjackwarriors.workers.dev/tasks)
+            echo "GET /tasks -> $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "Deployed API did not return 200" && exit 1

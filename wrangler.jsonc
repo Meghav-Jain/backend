@@ -1,21 +1,27 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "backend",
-  "main": "worker.py",
-  "compatibility_date": "2026-11-10",
-  "compatibility_flags": [
-    "python_workers",
-    "python_dedicated_snapshot"
-  ],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "todo-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "observability": {
-    "enabled": true
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "todo-api",
+	"main": "worker.py",
+	"compatibility_date": "2026-11-10",
+	"compatibility_flags": [
+		"python_workers",
+		"python_dedicated_snapshot"
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "todo-db",
+			"database_id": "cf8a419a-10ea-4aa8-a140-3172654bfe28",
+			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "todo_db",
+			"database_name": "todo-db",
+			"database_id": "cf8a419a-10ea-4aa8-a140-3172654bfe28",
+			"remote": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
 }
